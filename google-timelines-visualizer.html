@@ -264,10 +264,17 @@
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     try {
-                        const json = JSON.parse(e.target.result);
+                        var json;
+                        try {
+                            json = JSON.parse(e.target.result);
+                        } catch (parseErr) {
+                            showError("Invalid JSON file.");
+                            console.error(parseErr);
+                            return;
+                        }
                         processData(json);
                     } catch (err) {
-                        showError("Invalid JSON structure.");
+                        showError("Error processing data: " + err.message);
                         console.error(err);
                     } finally {
                         loading.classList.add('hidden');
@@ -404,7 +411,6 @@
             document.getElementById('totalPoints').textContent = rawPoints.length.toLocaleString();
             document.getElementById('totalDistance').textContent = `${totalDistKm.toLocaleString(undefined, {maximumFractionDigits: 0})} km / ${totalDistMi.toLocaleString(undefined, {maximumFractionDigits: 0})} mi`;
             document.getElementById('uniqueBins').textContent = weightedPoints.length.toLocaleString();
-            document.getElementById('maxDensity').textContent = maxLogWeight.toFixed(2);
             
             if (minTs !== Infinity && maxTs !== -Infinity) {
                 const d1 = new Date(minTs).getFullYear();
