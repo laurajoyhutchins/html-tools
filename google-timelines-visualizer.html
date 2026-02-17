@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location History Heatmap</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Leaflet Heat -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background-color: #0d0887; } /* Plasma dark blue bg */
+        #map { height: 100%; width: 100%; z-index: 0; }
+        
+        .glass-panel {
+            background: rgba(13, 8, 135, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #panelContent {
+            transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+            max-height: 600px;
+            opacity: 1;
+            overflow: hidden;
+        }
+        #panelContent.collapsed {
+            max-height: 0;
+            opacity: 0;
+            margin-top: 0 !important;
+        }
+        
+        #toggleIcon { transition: transform 0.3s ease; }
+        .collapsed #toggleIcon { transform: rotate(-180deg); }
+
+        /* Custom Select */
+        select {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+            padding-right: 2.5rem;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+    </style>
+</head>
+<body class="text-gray-200 font-sans antialiased">
+
+    <!-- Control Panel -->
+    <div id="mainPanel" class="absolute top-4 left-4 z-[1000] w-80 glass-panel rounded-xl shadow-2xl p-4 transition-all duration-300">
+        <div class="flex justify-between items-center cursor-pointer" id="panelHeader">
+            <div>
+                <h1 class="text-lg font-bold text-white tracking-tight">Timeline Heatmap</h1>
+                <p class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Analytics & Visualization</p>
+            </div>
+            <button class="p-2 hover:bg-white/10 rounded-full transition-colors">
+                <svg id="toggleIcon" class="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div id="panelContent" class="mt-4 space-y-4">
+            
+            <!-- File Input -->
+            <div class="relative group">
+                <input type="file" id="fileInput" accept=".json" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                <div class="border-2 border-dashed border-gray-600 rounded-lg p-4 text-center group-hover:border-purple-500 group-hover:bg-white/5 transition-colors">
+                    <div id="dropLabel" class="text-sm text-gray-300 font-medium">
+                        Drop JSON File
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div id="statsPanel" class="hidden flex-col gap-2 text-xs border-t border-gray-700 pt-3">
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Total Points</span>
+                    <span id="totalPoints" class="text-gray-200 font-mono">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Distance</span>
+                    <span id="totalDistance" class="text-emerald-400 font-mono font-bold">0 km</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Unique Bins</span>
+                    <span id="uniqueBins" class="text-gray-200 font-mono">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Max Density (Log)</span>
+                    <span id="maxDensity" class="text-gray-200 font-mono">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Range</span>
+                    <span id="dateRange" class="text-gray-200 font-mono">-</span>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div id="controls" class="hidden flex-col gap-3 border-t border-gray-700 pt-3">
+                <div>
+                    <label class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Visualization Mode</label>
+                    <select id="modeSelect" class="w-full mt-1 bg-gray-700 border border-gray-600 text-gray-200 text-xs rounded p-2 focus:ring-purple-500 focus:border-purple-500 outline-none">
+                        <option value="heat">Heatmap</option>
+                        <option value="dots">Dots (Scatter)</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Log Base Scale</label>
+                    <input type="range" id="intensityRange" min="0.5" max="3" step="0.1" value="1.0" class="w-full mt-1 accent-purple-500 bg-gray-700 h-1 rounded-lg appearance-none cursor-pointer">
+                    <p class="text-[10px] text-gray-500 mt-1">Lower = Higher contrast</p>
+                </div>
+                <div>
+                    <label id="radiusLabel" class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Radius</label>
+                    <input type="range" id="radiusRange" min="1" max="40" step="1" value="10" class="w-full mt-1 accent-purple-500 bg-gray-700 h-1 rounded-lg appearance-none cursor-pointer">
+                </div>
+                <div id="blurContainer">
+                     <label class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Blur</label>
+                    <input type="range" id="blurRange" min="5" max="50" step="1" value="15" class="w-full mt-1 accent-purple-500 bg-gray-700 h-1 rounded-lg appearance-none cursor-pointer">
+                </div>
+                <button id="resetView" class="mt-1 w-full bg-white/10 hover:bg-white/20 text-xs py-2 rounded text-gray-200 transition-colors font-medium">
+                    Reset Camera
+                </button>
+            </div>
+
+            <div id="loading" class="hidden text-center py-2">
+                <svg class="animate-spin h-5 w-5 text-purple-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span class="text-xs text-gray-400 mt-1 block">Calculations in progress...</span>
+            </div>
+             <div id="errorMsg" class="hidden text-red-400 text-xs text-center border-t border-gray-700 pt-2"></div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        // --- Constants ---
+        const E7_DIVISOR = 1e7;
+        const GRID_PRECISION = 4; // ~11m resolution
+        
+        // --- State ---
+        let map;
+        let heatLayer;
+        let dotLayer; // LayerGroup for dots
+        let weightedPoints = []; // [lat, lng, logWeight]
+        let maxLogWeight = 1;
+        let bounds = null;
+
+        // --- UI ---
+        const panelHeader = document.getElementById('panelHeader');
+        const panelContent = document.getElementById('panelContent');
+        const mainPanel = document.getElementById('mainPanel');
+        const modeSelect = document.getElementById('modeSelect');
+        const blurContainer = document.getElementById('blurContainer');
+        const radiusLabel = document.getElementById('radiusLabel');
+
+        panelHeader.addEventListener('click', () => {
+            panelContent.classList.toggle('collapsed');
+            mainPanel.classList.toggle('collapsed');
+        });
+
+        modeSelect.addEventListener('change', (e) => {
+            if (e.target.value === 'dots') {
+                blurContainer.classList.add('hidden');
+                radiusLabel.textContent = "Dot Size (Base)";
+                document.getElementById('radiusRange').value = 4; // Default smaller for dots
+            } else {
+                blurContainer.classList.remove('hidden');
+                radiusLabel.textContent = "Radius";
+                document.getElementById('radiusRange').value = 10;
+            }
+            renderVisualization();
+        });
+
+        // --- Map Init ---
+        function initMap() {
+            map = L.map('map', {
+                center: [20, 0],
+                zoom: 2,
+                zoomControl: false,
+                preferCanvas: true // Critical for dot performance
+            });
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(map);
+
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+        }
+
+        // --- Helpers ---
+        function parseGeoString(geoStr) {
+            if (!geoStr || typeof geoStr !== 'string' || !geoStr.startsWith('geo:')) return null;
+            const parts = geoStr.replace('geo:', '').split(',');
+            if (parts.length === 2) {
+                const lat = parseFloat(parts[0]);
+                const lng = parseFloat(parts[1]);
+                if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+            }
+            return null;
+        }
+
+        function haversine(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Radius of the earth in km
+            const dLat = deg2rad(lat2 - lat1);
+            const dLon = deg2rad(lon2 - lon1);
+            const a = 
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2); 
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
+            const d = R * c; // Distance in km
+            return d;
+        }
+
+        function deg2rad(deg) {
+            return deg * (Math.PI / 180);
+        }
+
+        function extractSemanticPoint(obj, list) {
+            if (obj.visit?.topCandidate?.placeLocation) {
+                const pt = parseGeoString(obj.visit.topCandidate.placeLocation);
+                if (pt) list.push({ ...pt, ts: obj.startTime });
+            }
+            if (obj.activity) {
+                if (obj.activity.start) {
+                    const pt = parseGeoString(obj.activity.start);
+                    if (pt) list.push({ ...pt, ts: obj.startTime });
+                }
+                if (obj.activity.end) {
+                    const pt = parseGeoString(obj.activity.end);
+                    if (pt) list.push({ ...pt, ts: obj.endTime });
+                }
+            }
+        }
+
+        // --- Core Logic ---
+        const fileInput = document.getElementById('fileInput');
+        const loading = document.getElementById('loading');
+        const errorMsg = document.getElementById('errorMsg');
+        const statsPanel = document.getElementById('statsPanel');
+        const controls = document.getElementById('controls');
+
+        fileInput.addEventListener('change', handleFileSelect, false);
+
+        function handleFileSelect(evt) {
+            const file = evt.target.files[0];
+            if (!file) return;
+
+            resetUI();
+            document.getElementById('dropLabel').textContent = file.name;
+            loading.classList.remove('hidden');
+
+            setTimeout(() => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const json = JSON.parse(e.target.result);
+                        processData(json);
+                    } catch (err) {
+                        showError("Invalid JSON structure.");
+                        console.error(err);
+                    } finally {
+                        loading.classList.add('hidden');
+                    }
+                };
+                reader.readAsText(file);
+            }, 100);
+        }
+
+        function resetUI() {
+            clearLayers();
+            weightedPoints = [];
+            errorMsg.classList.add('hidden');
+            statsPanel.classList.add('hidden');
+            controls.classList.add('hidden');
+        }
+
+        function clearLayers() {
+            if (heatLayer) {
+                map.removeLayer(heatLayer);
+                heatLayer = null;
+            }
+            if (dotLayer) {
+                map.removeLayer(dotLayer);
+                dotLayer = null;
+            }
+        }
+
+        function showError(msg) {
+            errorMsg.textContent = msg;
+            errorMsg.classList.remove('hidden');
+        }
+
+        function processData(json) {
+            let rawPoints = [];
+
+            // 1. Extraction
+            if (Array.isArray(json)) {
+                json.forEach(item => extractSemanticPoint(item, rawPoints));
+            } else if (typeof json === 'object') {
+                if (json.locations && Array.isArray(json.locations)) {
+                    json.locations.forEach(loc => {
+                        if (loc.latitudeE7 && loc.longitudeE7) {
+                            rawPoints.push({
+                                lat: loc.latitudeE7 / E7_DIVISOR,
+                                lng: loc.longitudeE7 / E7_DIVISOR,
+                                ts: loc.timestampMs
+                            });
+                        }
+                    });
+                } else if (json.timelineObjects && Array.isArray(json.timelineObjects)) {
+                    json.timelineObjects.forEach(obj => {
+                        if (obj.placeVisit) {
+                            const pt = parseGeoString(obj.placeVisit.location?.placeLocation || obj.placeVisit.location);
+                            if (pt) rawPoints.push({ ...pt, ts: obj.placeVisit.duration?.startTimestamp });
+                        } else if (obj.activitySegment) {
+                             const ptStart = parseGeoString(obj.activitySegment.startLocation);
+                             if (ptStart) rawPoints.push({ ...ptStart, ts: obj.activitySegment.duration?.startTimestamp });
+                        } else {
+                            extractSemanticPoint(obj, rawPoints);
+                        }
+                    });
+                }
+            }
+
+            if (rawPoints.length === 0) {
+                showError("No valid location data found.");
+                return;
+            }
+
+            // 2. Pre-processing (Sorting)
+            // Essential for chronological distance calculation
+            rawPoints.sort((a, b) => {
+                const tsA = new Date(a.ts).getTime();
+                const tsB = new Date(b.ts).getTime();
+                return tsA - tsB;
+            });
+
+            // 3. Distance Calculation & Grid Aggregation
+            const grid = new Map();
+            let minTs = Infinity;
+            let maxTs = -Infinity;
+            let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+            let totalDistKm = 0;
+
+            for (let i = 0; i < rawPoints.length; i++) {
+                const pt = rawPoints[i];
+
+                // Bounds & Time update
+                const ts = new Date(pt.ts).getTime();
+                if (!isNaN(ts)) {
+                    if (ts < minTs) minTs = ts;
+                    if (ts > maxTs) maxTs = ts;
+                }
+                
+                if (pt.lat < minLat) minLat = pt.lat;
+                if (pt.lat > maxLat) maxLat = pt.lat;
+                if (pt.lng < minLng) minLng = pt.lng;
+                if (pt.lng > maxLng) maxLng = pt.lng;
+
+                // Skip Null Island
+                if (Math.abs(pt.lat) < 0.1 && Math.abs(pt.lng) < 0.1) continue;
+
+                // Distance Accumulation
+                if (i > 0) {
+                    const prev = rawPoints[i-1];
+                    const dist = haversine(prev.lat, prev.lng, pt.lat, pt.lng);
+                    // Filter jitter: Only count moves > 100 meters (0.1km)
+                    if (dist > 0.1) {
+                        totalDistKm += dist;
+                    }
+                }
+
+                // Binning
+                const key = `${pt.lat.toFixed(GRID_PRECISION)},${pt.lng.toFixed(GRID_PRECISION)}`;
+                grid.set(key, (grid.get(key) || 0) + 1);
+            }
+
+            weightedPoints = [];
+            let localMaxWeight = 0;
+
+            for (const [key, count] of grid.entries()) {
+                const [lat, lng] = key.split(',').map(Number);
+                const weight = Math.log10(count + 1); 
+                if (weight > localMaxWeight) localMaxWeight = weight;
+                weightedPoints.push({lat, lng, weight, count});
+            }
+
+            maxLogWeight = localMaxWeight;
+            bounds = L.latLngBounds([minLat, minLng], [maxLat, maxLng]);
+
+            // UI Updates
+            const totalDistMi = totalDistKm * 0.621371;
+            document.getElementById('totalPoints').textContent = rawPoints.length.toLocaleString();
+            document.getElementById('totalDistance').textContent = `${totalDistKm.toLocaleString(undefined, {maximumFractionDigits: 0})} km / ${totalDistMi.toLocaleString(undefined, {maximumFractionDigits: 0})} mi`;
+            document.getElementById('uniqueBins').textContent = weightedPoints.length.toLocaleString();
+            document.getElementById('maxDensity').textContent = maxLogWeight.toFixed(2);
+            
+            if (minTs !== Infinity && maxTs !== -Infinity) {
+                const d1 = new Date(minTs).getFullYear();
+                const d2 = new Date(maxTs).getFullYear();
+                document.getElementById('dateRange').textContent = `${d1} - ${d2}`;
+            }
+
+            statsPanel.classList.remove('hidden');
+            statsPanel.classList.add('flex');
+            controls.classList.remove('hidden');
+            controls.classList.add('flex');
+
+            renderVisualization();
+            if (weightedPoints.length > 0) map.fitBounds(bounds);
+        }
+
+        // --- Color Utils ---
+        function getPlasmaColor(t) {
+            if (t < 0) t = 0;
+            if (t > 1) t = 1;
+            if (t < 0.1) return '#0d0887';
+            if (t < 0.3) return '#46039f';
+            if (t < 0.5) return '#7201a8';
+            if (t < 0.7) return '#cc4778';
+            if (t < 0.9) return '#ed7953';
+            return '#f0f921';
+        }
+
+        function renderVisualization() {
+            clearLayers();
+            const mode = document.getElementById('modeSelect').value;
+            
+            if (mode === 'heat') {
+                renderHeatmap();
+            } else {
+                renderDots();
+            }
+        }
+
+        function renderHeatmap() {
+            const scaleFactor = parseFloat(document.getElementById('intensityRange').value);
+            const radius = parseInt(document.getElementById('radiusRange').value);
+            const blur = parseInt(document.getElementById('blurRange').value);
+
+            const heatData = weightedPoints.map(p => [p.lat, p.lng, p.weight]);
+            
+            const plasma = {
+                0.0: '#0d0887', 
+                0.1: '#46039f', 
+                0.3: '#7201a8',
+                0.5: '#cc4778',
+                0.7: '#ed7953',
+                0.9: '#fdc527',
+                1.0: '#f0f921' 
+            };
+
+            const calculatedMax = maxLogWeight / scaleFactor;
+
+            heatLayer = L.heatLayer(heatData, {
+                radius: radius,
+                blur: blur,
+                maxZoom: 10,
+                max: calculatedMax,
+                gradient: plasma
+            }).addTo(map);
+        }
+
+        function renderDots() {
+            const scaleFactor = parseFloat(document.getElementById('intensityRange').value);
+            const baseRadius = parseInt(document.getElementById('radiusRange').value);
+            
+            const markers = [];
+            const calculatedMax = maxLogWeight / scaleFactor;
+
+            const myRenderer = L.canvas({ padding: 0.5 });
+
+            weightedPoints.forEach(p => {
+                let normalized = p.weight / calculatedMax;
+                if (normalized > 1) normalized = 1;
+
+                const color = getPlasmaColor(normalized);
+                const radius = Math.max(1, (baseRadius * 0.3) + (baseRadius * 0.7 * normalized));
+
+                const circle = L.circleMarker([p.lat, p.lng], {
+                    renderer: myRenderer,
+                    radius: radius,
+                    fillColor: color,
+                    color: color,
+                    weight: 0,
+                    fillOpacity: 0.8,
+                    interactive: true
+                });
+                
+                circle.bindTooltip(`Visits: ${p.count}`, { direction: 'top', offset: [0, -5] });
+                markers.push(circle);
+            });
+
+            dotLayer = L.layerGroup(markers).addTo(map);
+        }
+
+        // --- Interaction ---
+        document.getElementById('intensityRange').addEventListener('input', renderVisualization);
+        document.getElementById('radiusRange').addEventListener('input', renderVisualization);
+        document.getElementById('blurRange').addEventListener('input', renderVisualization);
+        
+        document.getElementById('resetView').addEventListener('click', () => {
+            if (bounds) map.fitBounds(bounds);
+        });
+
+        initMap();
+
+    </script>
+</body>
+</html>
