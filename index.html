@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Tools</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0d0887;
+            background-image:
+                radial-gradient(ellipse at 20% 50%, rgba(114, 1, 168, 0.25) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 20%, rgba(70, 3, 159, 0.2) 0%, transparent 50%);
+            min-height: 100vh;
+        }
+        .tool-card {
+            background: rgba(13, 8, 135, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .tool-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(168, 85, 247, 0.4);
+            box-shadow: 0 8px 30px rgba(114, 1, 168, 0.3);
+        }
+    </style>
+</head>
+<body class="text-gray-200 font-sans antialiased">
+    <div class="max-w-3xl mx-auto px-6 py-16">
+        <header class="mb-12">
+            <h1 class="text-3xl font-bold text-white tracking-tight">HTML Tools</h1>
+            <p class="text-gray-400 mt-2">A collection of standalone, browser-based utilities. No servers, no sign-ups &mdash; everything runs locally.</p>
+        </header>
+
+        <div class="grid gap-4">
+            <a href="google-timelines-visualizer.html" class="tool-card rounded-xl p-6 block no-underline">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">Timeline Heatmap Visualizer</h2>
+                        <p class="text-sm text-gray-400 mt-1">Visualize your Google Location History as an interactive heatmap or scatter plot. Supports multiple export formats from Google Takeout.</p>
+                    </div>
+                    <svg class="w-5 h-5 text-gray-500 mt-1 flex-shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </div>
+                <div class="flex gap-2 mt-4">
+                    <span class="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-white/10 text-gray-300">Leaflet</span>
+                    <span class="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-white/10 text-gray-300">Maps</span>
+                    <span class="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-white/10 text-gray-300">Privacy-First</span>
+                </div>
+            </a>
+        </div>
+
+        <footer class="mt-16 text-xs text-gray-500 border-t border-white/10 pt-6">
+            All tools process data locally in your browser. Nothing is uploaded.
+        </footer>
+    </div>
+</body>
+</html>
