@@ -27,7 +27,7 @@
 
         #panelContent {
             transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
-            max-height: 600px;
+            max-height: 700px;
             opacity: 1;
             overflow: hidden;
         }
@@ -100,6 +100,19 @@
                 </div>
             </div>
 
+            <!-- Time Range Filter -->
+            <div id="timeFilter" class="hidden flex-col gap-2 text-xs border-t border-gray-700 pt-3">
+                <label class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Time Range Filter</label>
+                <div class="flex gap-2 items-center">
+                    <input type="date" id="startDate" class="flex-1 bg-gray-700 border border-gray-600 text-gray-200 text-xs rounded p-1.5 focus:ring-purple-500 focus:border-purple-500 outline-none">
+                    <span class="text-gray-500">to</span>
+                    <input type="date" id="endDate" class="flex-1 bg-gray-700 border border-gray-600 text-gray-200 text-xs rounded p-1.5 focus:ring-purple-500 focus:border-purple-500 outline-none">
+                </div>
+                <button id="resetDates" class="w-full bg-white/5 hover:bg-white/10 text-[10px] py-1 rounded text-gray-400 transition-colors">
+                    Reset to Full Range
+                </button>
+            </div>
+
             <!-- Controls -->
             <div id="controls" class="hidden flex-col gap-3 border-t border-gray-700 pt-3">
                 <div>
@@ -153,6 +166,7 @@
         let weightedPoints = []; // [lat, lng, logWeight]
         let maxLogWeight = 1;
         let bounds = null;
+        let allRawPoints = []; // All extracted points (persisted for re-filtering)
 
         // --- UI ---
         const panelHeader = document.getElementById('panelHeader');
@@ -161,6 +175,10 @@
         const modeSelect = document.getElementById('modeSelect');
         const blurContainer = document.getElementById('blurContainer');
         const radiusLabel = document.getElementById('radiusLabel');
+        const timeFilter = document.getElementById('timeFilter');
+        const startDateInput = document.getElementById('startDate');
+        const endDateInput = document.getElementById('endDate');
+        const resetDatesBtn = document.getElementById('resetDates');
 
         panelHeader.addEventListener('click', () => {
             panelContent.classList.toggle('collapsed');
@@ -287,8 +305,10 @@
         function resetUI() {
             clearLayers();
             weightedPoints = [];
+            allRawPoints = [];
             errorMsg.classList.add('hidden');
             statsPanel.classList.add('hidden');
+            timeFilter.classList.add('hidden');
             controls.classList.add('hidden');
         }
 
@@ -346,49 +366,108 @@
             }
 
             // 2. Pre-processing (Sorting)
-            // Essential for chronological distance calculation
             rawPoints.sort((a, b) => {
                 const tsA = new Date(a.ts).getTime();
                 const tsB = new Date(b.ts).getTime();
                 return tsA - tsB;
             });
 
-            // 3. Distance Calculation & Grid Aggregation
+            // Store globally for re-filtering
+            allRawPoints = rawPoints;
+
+            // Set date input bounds from full dataset
+            let minTs = Infinity;
+            let maxTs = -Infinity;
+            for (const pt of allRawPoints) {
+                const ts = new Date(pt.ts).getTime();
+                if (!isNaN(ts)) {
+                    if (ts < minTs) minTs = ts;
+                    if (ts > maxTs) maxTs = ts;
+                }
+            }
+
+            if (minTs !== Infinity && maxTs !== -Infinity) {
+                const minDate = new Date(minTs).toISOString().split('T')[0];
+                const maxDate = new Date(maxTs).toISOString().split('T')[0];
+                startDateInput.min = minDate;
+                startDateInput.max = maxDate;
+                endDateInput.min = minDate;
+                endDateInput.max = maxDate;
+                startDateInput.value = minDate;
+                endDateInput.value = maxDate;
+            }
+
+            // Show panels
+            statsPanel.classList.remove('hidden');
+            statsPanel.classList.add('flex');
+            timeFilter.classList.remove('hidden');
+            timeFilter.classList.add('flex');
+            controls.classList.remove('hidden');
+            controls.classList.add('flex');
+
+            // Initial render with full range
+            filterAndRender(true);
+        }
+
+        function filterAndRender(fitBounds) {
+            const startVal = startDateInput.value;
+            const endVal = endDateInput.value;
+
+            let filtered = allRawPoints;
+
+            if (startVal || endVal) {
+                const startMs = startVal ? new Date(startVal + 'T00:00:00').getTime() : -Infinity;
+                // End date is inclusive: use end of day
+                const endMs = endVal ? new Date(endVal + 'T23:59:59.999').getTime() : Infinity;
+
+                filtered = allRawPoints.filter(pt => {
+                    const ts = new Date(pt.ts).getTime();
+                    if (isNaN(ts)) return true; // keep points without valid timestamps
+                    return ts >= startMs && ts <= endMs;
+                });
+            }
+
+            if (filtered.length === 0) {
+                clearLayers();
+                weightedPoints = [];
+                document.getElementById('totalPoints').textContent = '0';
+                document.getElementById('totalDistance').textContent = '0 km / 0 mi';
+                document.getElementById('uniqueBins').textContent = '0';
+                document.getElementById('dateRange').textContent = '-';
+                return;
+            }
+
+            // Grid Aggregation & Stats
             const grid = new Map();
             let minTs = Infinity;
             let maxTs = -Infinity;
             let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
             let totalDistKm = 0;
 
-            for (let i = 0; i < rawPoints.length; i++) {
-                const pt = rawPoints[i];
+            for (let i = 0; i < filtered.length; i++) {
+                const pt = filtered[i];
 
-                // Bounds & Time update
                 const ts = new Date(pt.ts).getTime();
                 if (!isNaN(ts)) {
                     if (ts < minTs) minTs = ts;
                     if (ts > maxTs) maxTs = ts;
                 }
-                
+
                 if (pt.lat < minLat) minLat = pt.lat;
                 if (pt.lat > maxLat) maxLat = pt.lat;
                 if (pt.lng < minLng) minLng = pt.lng;
                 if (pt.lng > maxLng) maxLng = pt.lng;
 
-                // Skip Null Island
                 if (Math.abs(pt.lat) < 0.1 && Math.abs(pt.lng) < 0.1) continue;
 
-                // Distance Accumulation
                 if (i > 0) {
-                    const prev = rawPoints[i-1];
+                    const prev = filtered[i - 1];
                     const dist = haversine(prev.lat, prev.lng, pt.lat, pt.lng);
-                    // Filter jitter: Only count moves > 100 meters (0.1km)
                     if (dist > 0.1) {
                         totalDistKm += dist;
                     }
                 }
 
-                // Binning
                 const key = `${pt.lat.toFixed(GRID_PRECISION)},${pt.lng.toFixed(GRID_PRECISION)}`;
                 grid.set(key, (grid.get(key) || 0) + 1);
             }
@@ -398,9 +477,9 @@
 
             for (const [key, count] of grid.entries()) {
                 const [lat, lng] = key.split(',').map(Number);
-                const weight = Math.log10(count + 1); 
+                const weight = Math.log10(count + 1);
                 if (weight > localMaxWeight) localMaxWeight = weight;
-                weightedPoints.push({lat, lng, weight, count});
+                weightedPoints.push({ lat, lng, weight, count });
             }
 
             maxLogWeight = localMaxWeight;
@@ -408,23 +487,18 @@
 
             // UI Updates
             const totalDistMi = totalDistKm * 0.621371;
-            document.getElementById('totalPoints').textContent = rawPoints.length.toLocaleString();
-            document.getElementById('totalDistance').textContent = `${totalDistKm.toLocaleString(undefined, {maximumFractionDigits: 0})} km / ${totalDistMi.toLocaleString(undefined, {maximumFractionDigits: 0})} mi`;
+            document.getElementById('totalPoints').textContent = filtered.length.toLocaleString();
+            document.getElementById('totalDistance').textContent = `${totalDistKm.toLocaleString(undefined, { maximumFractionDigits: 0 })} km / ${totalDistMi.toLocaleString(undefined, { maximumFractionDigits: 0 })} mi`;
             document.getElementById('uniqueBins').textContent = weightedPoints.length.toLocaleString();
-            
+
             if (minTs !== Infinity && maxTs !== -Infinity) {
-                const d1 = new Date(minTs).getFullYear();
-                const d2 = new Date(maxTs).getFullYear();
+                const d1 = new Date(minTs).toLocaleDateString();
+                const d2 = new Date(maxTs).toLocaleDateString();
                 document.getElementById('dateRange').textContent = `${d1} - ${d2}`;
             }
 
-            statsPanel.classList.remove('hidden');
-            statsPanel.classList.add('flex');
-            controls.classList.remove('hidden');
-            controls.classList.add('flex');
-
             renderVisualization();
-            if (weightedPoints.length > 0) map.fitBounds(bounds);
+            if (fitBounds && weightedPoints.length > 0) map.fitBounds(bounds);
         }
 
         // --- Color Utils ---
@@ -515,9 +589,17 @@
         document.getElementById('intensityRange').addEventListener('input', renderVisualization);
         document.getElementById('radiusRange').addEventListener('input', renderVisualization);
         document.getElementById('blurRange').addEventListener('input', renderVisualization);
-        
+
         document.getElementById('resetView').addEventListener('click', () => {
             if (bounds) map.fitBounds(bounds);
+        });
+
+        startDateInput.addEventListener('change', () => filterAndRender(false));
+        endDateInput.addEventListener('change', () => filterAndRender(false));
+        resetDatesBtn.addEventListener('click', () => {
+            startDateInput.value = startDateInput.min;
+            endDateInput.value = endDateInput.max;
+            filterAndRender(true);
         });
 
         initMap();
