@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Location History Heatmap</title>
+    <title>Google Timeline Heatmap</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- Leaflet CSS -->
@@ -58,8 +58,8 @@
     <div id="mainPanel" class="absolute top-4 left-4 z-[1000] w-80 glass-panel rounded-xl shadow-2xl p-4 transition-all duration-300">
         <div class="flex justify-between items-center cursor-pointer" id="panelHeader">
             <div>
-                <h1 class="text-lg font-bold text-white tracking-tight">Timeline Heatmap</h1>
-                <p class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Analytics & Visualization</p>
+                <h1 class="text-lg font-bold text-white tracking-tight">Google Timeline Heatmap</h1>
+                <p class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">All information is kept client side, not that it matters since Google already has your data. But at least I won't :D</p>
             </div>
             <button class="p-2 hover:bg-white/10 rounded-full transition-colors">
                 <svg id="toggleIcon" class="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -107,15 +107,15 @@
             <!-- Controls -->
             <div id="controls" class="hidden flex-col gap-3 border-t border-gray-700 pt-3">
                 <div>
-                    <label class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Visualization Mode</label>
+                    <label class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Mode</label>
                     <select id="modeSelect" class="w-full mt-1 bg-gray-700 border border-gray-600 text-gray-200 text-xs rounded p-2 focus:ring-purple-500 focus:border-purple-500 outline-none">
                         <option value="heat">Heatmap</option>
-                        <option value="dots">Dots (Scatter)</option>
+                        <option value="dots">Scatter</option>
                     </select>
                 </div>
                 
                 <div>
-                    <label class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Log Base Scale</label>
+                    <label class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Scale</label>
                     <input type="range" id="intensityRange" min="0.5" max="3" step="0.1" value="1.0" class="w-full mt-1 accent-purple-500 bg-gray-700 h-1 rounded-lg appearance-none cursor-pointer">
                     <p class="text-[10px] text-gray-500 mt-1">Lower = Higher contrast</p>
                 </div>
@@ -137,7 +137,7 @@
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span class="text-xs text-gray-400 mt-1 block">Calculations in progress...</span>
+                <span class="text-xs text-gray-400 mt-1 block">Morging...</span>
             </div>
              <div id="errorMsg" class="hidden text-red-400 text-xs text-center border-t border-gray-700 pt-2"></div>
         </div>
